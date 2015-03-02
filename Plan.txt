@@ -1,1 +1,7 @@
 Here I will write a plan for a long term investment test program.
+Will use russel 3000, which represents 98% of US market
+First need to understand where I can download data for russel 3000 as far at least for 20 years.
+
+Seems that yahoo/google cannot provide historical fundamental data.
+Quandl resource can, but for 10 years back and may be will cost 50$.
+Have a problem to install numpy/pandas at my desktop.
