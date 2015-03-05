@@ -5,25 +5,27 @@ import re
 from ltistdb import *
 import datetime
 
-def populateCompanies (companiesFileName):
+def populateCompanies (companiesFileName, fastmode):
    fh = open(companiesFileName,'r')
    try:
       reader = csv.DictReader(fh)
       print "Starting populate DB with companies, {} companies to go...".format(reader.line_num)
+      answer = raw_input('Press enter to start work')
       i=0
       startTime = datetime.datetime.now().replace(microsecond=0)
       for row in reader:
          #Search for a ticker in the DB
-         if companyExist(row['Ticker']):
-            print "Trying to insert company with ticker, which is already exist"
-            print "Ticker - {} , Name - {},".format(row['Ticker'],row['Stock Name'])
-            print "To confirm type - yes, to decline type - no"
-            answer = raw_input()
-            if not re.match('y', answer):
-               print "Will skip this stock"
-               continue
-            else:
-               print "Will add this stock anyway"
+         if not fastmode:
+            if companyExist(row['Ticker']):
+               print "Trying to insert company with ticker, which is already exist"
+               print "Ticker - {} , Name - {},".format(row['Ticker'],row['Stock Name'])
+               print "To confirm type - yes, to decline type - no"
+               answer = raw_input()
+               if not re.match('y', answer):
+                  print "Will skip this stock"
+                  continue
+               else:
+                  print "Will add this stock anyway"
          registerCompany(row['Ticker'],row['Stock Name'])
          print "Line #{} is parsed".format(i)
          i=i+1
@@ -33,12 +35,13 @@ def populateCompanies (companiesFileName):
       print "Time passed : {}".format(endTime - startTime)
       fh.close()
 
+
 def main():
    #Handle arguments
    parser = argparse.ArgumentParser(description='LTIST - stands for long term investment system test')
    parser.add_argument('-p','--populateCompanies', help='Optional parameter, if specified, the script will use the list to populate the fundamentals database')
    parser.add_argument('-a','--addDMDRNReports', action='store_true', help='Optional parameter, if specified, the script will add reports taken from DMDRN database on each company existing in fundamentals database')
-   parser.add_argument('-c','--clearCompaniesDB', action='store_true', help='Optional parameter, if specified, the script will clear companies records from fundamentals database')
+   parser.add_argument('-c','--clearCompaniesDB', action='store_true', help='Optional parameter, if specified, the script will clear companies records from fundamentals database and start from clean state')
    args = parser.parse_args()
 
    if args.clearCompaniesDB:
@@ -49,7 +52,7 @@ def main():
       if not args.populateCompanies.endswith('.csv'):
          sys.exit("<{}> is not a .csv file. Exiting...".format(args.populateCompanies))   
       #Read file into temporary array
-      populateCompanies(args.populateCompanies)
+      populateCompanies(args.populateCompanies, args.clearCompaniesDB)
 
 if __name__ == '__main__':
    main()
