@@ -5,3 +5,10 @@ First need to understand where I can download data for russel 3000 as far at lea
 Seems that yahoo/google cannot provide historical fundamental data.
 Quandl resource can, but for 10 years back and may be will cost 50$.
 Have a problem to install numpy/pandas at my desktop.
+
+Managed to install numpy/pandas and activate Quandl free DB called DMDRN.
+DMDRN is a free database, which is no longer being updated. It has data between dates : 1999-2013
+
+Should see what bloomberg can offer
+
+
