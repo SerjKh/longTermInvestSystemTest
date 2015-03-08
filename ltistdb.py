@@ -11,6 +11,7 @@ class Ltistdb(object):
   _reportTypeToDBNameMapping = {
     'PE_CURR'  : 'ReportPEAnnual',
     'ROE' : 'ReportROEAnnual',
+    'STOCK_PX' : 'ReportStockPriceAnnual', 
     'MKT_CAP' : 'ReportMKTCAPAnnual'
   }
 
@@ -137,19 +138,44 @@ class Ltistdb(object):
     self.verboseprint("Company {} was removed".format(companyId))
 
   def systemTestComplexQuery(self, year, numOfTopStocks):
-    self._cursor.execute("SELECT * FROM (\
-                          SELECT PERanked.companyId, PERanked.rank + ROERanked.rank AS rank FROM \
-                          (SELECT row_number() OVER (ORDER BY PE) AS rank, topStocks.companyId FROM \
-                           (SELECT companyId FROM ReportMKTCAPAnnual WHERE year={0} ORDER BY MKT_CAP DESC LIMIT {1}) as topStocks,\
-                            ReportPEAnnual WHERE topStocks.companyId = ReportPEAnnual.companyId AND year = {0}) AS PERanked,\
-                          (SELECT row_number() OVER (ORDER BY ROE DESC) AS rank, topStocks.companyId FROM \
-                           (SELECT companyId FROM ReportMKTCAPAnnual WHERE year={0} ORDER BY MKT_CAP DESC LIMIT {1}) as topStocks,\
-                            ReportROEAnnual WHERE topStocks.companyId = ReportROEAnnual.companyId AND year = {0}) AS ROERanked \
-                          WHERE PERanked.companyId = ROERanked.companyId) as a order by rank".format(year,numOfTopStocks))
+    queryForMostHeavyStoks  = "(SELECT companyId FROM ReportMKTCAPAnnual WHERE year={0} ORDER BY MKT_CAP DESC LIMIT {1})".format(year,numOfTopStocks)
+    queryForRankedROEReport = "(SELECT row_number() OVER (ORDER BY ROE DESC) AS rank, topStocks.companyId FROM {} as topStocks,\
+                                 ReportROEAnnual WHERE topStocks.companyId = ReportROEAnnual.companyId AND year = {})".format(queryForMostHeavyStoks,year)
+    queryForRankedPEReport  = "(SELECT row_number() OVER (ORDER BY PE) AS rank, topStocks.companyId FROM {} as topStocks,\
+                                 ReportPEAnnual WHERE topStocks.companyId = ReportPEAnnual.companyId AND year = {})".format(queryForMostHeavyStoks,year)
+
+    self._cursor.execute("SELECT * FROM (SELECT PERanked.companyId, PERanked.rank + ROERanked.rank AS rank FROM {0} AS PERanked,\
+                          {1} AS ROERanked WHERE PERanked.companyId = ROERanked.companyId) as a order by rank".format(queryForRankedPEReport,queryForRankedROEReport))
     return self._cursor.fetchall()
 
+  def getMinReportYear(self):
+    self._cursor.execute("SELECT MIN(year) FROM ReportMKTCAPAnnual;")
+    return self._cursor.fetchall()[0][0]
+
+  def getMaxReportYear(self):
+    self._cursor.execute("SELECT MAX(year) FROM ReportMKTCAPAnnual;")
+    return self._cursor.fetchall()[0][0]    
+
+  def getCompaniesFromTable(self, type, year):
+    self._cursor.execute("SELECT companyId FROM {} WHERE year={} GROUP BY companyId;".format(self._reportTypeToDBNameMapping[type],year))
+    return self._cursor.fetchall()
+
+  def reportExist(self,type,companyId,year):
+    self._cursor.execute("SELECT COUNT(*) FROM {} WHERE companyId={} AND year={};".format(self._reportTypeToDBNameMapping[type],companyId,year))
+    return self._cursor.fetchall()[0][0]    
+
+  def removeCompanyFromReports(self, companyId, year):
+    for r in self._reportTypeToDBNameMapping:
+      self._cursor.execute("DELETE FROM {} WHERE companyId={} AND year={}".format(self._reportTypeToDBNameMapping[r],companyId,year))
+      self.verboseprint("Company with ID - {} for year - {} was deleted from table - ".format(companyId,year,self._reportTypeToDBNameMapping[r]))
+    self._DB.commit()
+
+  def getCompanyTicker(self, id):
+    self._cursor.execute("SELECT ticker FROM Companies WHERE id={}".format(id))
+    return self._cursor.fetchall()[0][0]
+
   def UnitTest(self):
-    print self.systemTestComplexQuery(1999,100)
+    print self.systemTestComplexQuery(1999,5)
     #value = self.hasValuesInReport(18147,'PE_CURR')
     #print value[0][0]
   #   # self.registerCompany("AA'A", 'somename')
