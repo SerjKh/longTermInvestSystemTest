@@ -7,6 +7,7 @@ import datetime
 import time
 from Quandl import *
 import random
+from pprint import pprint
 
 def getAuthToken():
    authFile = open('authtoken.txt','r')
@@ -135,19 +136,23 @@ def testTheSystem(remoteDbIf,token,dbIf,numOfStocks,portfolioSize):
          print rankedStocks[s]
          ticker = dbIf.getCompanyTicker(rankedStocks[s][0])
          prices = getDataOnCompanyFromRemoteDB(remoteDbIf, token, ticker, 'STOCK_PX')
-         startPrice = 0
-         endPrice=0
-         for p in prices.itertuples():
-            if toYear(p[0]) == year:
-               startPrice = p[1]
-            elif toYear(p[0] == year+1):
-               endPrice = p[1]
-         if startPrice == 0 or endPrice == 0:
-            print "DB doesn't have a prices for stock - {}, year - {}".format(ticker,year)
+         try:
+            pprint(prices)
+            startPrice = 0
+            endPrice=0
+            for p in prices.itertuples():
+               if int(toYear(p[0])) == year:
+                  startPrice = int(p[1])
+               elif int(toYear(p[0]) == year+1):
+                  endPrice = int(p[1])
+            if startPrice == 0 or endPrice == 0:
+               print "DB doesn't have a prices for stock - {}, year - {}".format(ticker,year)
+               continue
+            else:
+               revenue = (endPrice-startPrice)/startPrice;
+            print "Revenue for stock - {} is - {}".format(ticker,revenue)
+         except AttributeError:
             continue
-         else:
-            revenue = (endPrice-startPrice)/startPrice;
-         print "Revenue for stock - {} is - {}".format(ticker,revenue)
 
 
 
