@@ -8,6 +8,7 @@ import time
 from Quandl import *
 import random
 from pprint import pprint
+from yahoo_finance import *
 
 def getAuthToken():
    authFile = open('authtoken.txt','r')
@@ -52,6 +53,9 @@ def populateCompanies (companiesFileName, fastmode, dbIf):
 def toYear(timestamp):
    return str(timestamp)[:4]
 
+def toDate(timestamp):
+   return str(timestamp)[:10]
+  
 def populateReports(remoteDbIf,dbIf,token):
    """
       Initial database fill with all reports available.
@@ -113,7 +117,7 @@ def cleanReportsTables(dbIf):
             if not dbIf.reportExist(report,company[0],year):
                dbIf.removeCompanyFromReports(company[0],year)
 
-def testTheSystem(remoteDbIf,token,dbIf,numOfStocks,portfolioSize):
+def testTheSystem(remoteDbIf, token,dbIf,numOfStocks,portfolioSize):
    """
       This function tests the trading system as described bellow.
       For each year in the database (found by min/max on year):
@@ -133,29 +137,25 @@ def testTheSystem(remoteDbIf,token,dbIf,numOfStocks,portfolioSize):
          exit("Error: number of ranked stocks ({}) not equal initial numOfStocks parameter ({}).".format(len(rankedStocks),numOfStocks))
       print "--------------------------- Working on portfolio for year {} ----------------------------".format(year)
       for s in range(0,portfolioSize):
-         print rankedStocks[s]
          ticker = dbIf.getCompanyTicker(rankedStocks[s][0])
-         prices = getDataOnCompanyFromRemoteDB(remoteDbIf, token, ticker, 'STOCK_PX')
+		 print "Company - {}, rank - {}".format(ticker, rankedStocks[s][1])
+         mktCapRpt = getDataOnCompanyFromRemoteDB(remoteDbIf, token, ticker, 'MKT_CAP') #list of tuples (timestamp,value)
+		 startDate = 0
+		 endDate = 0
+		 for t in mktCapRpt.itertuples():
+			if int(toYear(t[0])) == year: 
+			   startDate = toDate(t[0])
+			   endDate = toDate(str(year+1) + t[0][4:])
          try:
-            pprint(prices)
-            startPrice = 0
-            endPrice=0
-            for p in prices.itertuples():
-               if int(toYear(p[0])) == year:
-                  startPrice = int(p[1])
-               elif int(toYear(p[0]) == year+1):
-                  endPrice = int(p[1])
+			share = Share(ticker)
+			startPrice = share.get_historical(startDate,startDate)[0]['Close']
+            endPrice = share.get_historical(endDate,endDate)[0]['Close']
             if startPrice == 0 or endPrice == 0:
                print "DB doesn't have a prices for stock - {}, year - {}".format(ticker,year)
+			   print "startPrice - {} ; endPrice - {}".format(startPrice,endPrice)
                continue
-            else:
-               revenue = (endPrice-startPrice)/startPrice;
+            revenue = (endPrice-startPrice)/startPrice;
             print "Revenue for stock - {} is - {}".format(ticker,revenue)
-         except AttributeError:
-            continue
-
-
-
 
 
 def main():
@@ -187,6 +187,6 @@ def main():
    if args.cleanReportsTables:
       cleanReportsTables(dbIf)
    if args.testTheSystem:
-      testTheSystem(Quandl,token,dbIf, int(args.testTheSystem[0]), int(args.testTheSystem[1]))
+      testTheSystem(Quandl, token, dbIf, int(args.testTheSystem[0]), int(args.testTheSystem[1]))
 if __name__ == '__main__':
    main()
