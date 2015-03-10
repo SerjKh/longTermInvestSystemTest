@@ -68,7 +68,11 @@ def populateReports(remoteDbIf,dbIf,token):
 
 def populateTable(remoteDbIf,dbIf,token,companiesList,indicator):
    for company in companiesList:
-      dataFromRemoteDB = getDataOnCompanyFromRemoteDB(remoteDbIf,token,company[1],indicator)
+      try:
+         dataFromRemoteDB = getDataOnCompanyFromRemoteDB(remoteDbIf,token,company[1],indicator)
+      except DatasetNotFound as e:
+         print e
+         continue
       for d in dataFromRemoteDB.itertuples():
          dbIf.addReport(reportType, company[0], toYear(d[0]), d[1])
 
@@ -83,11 +87,8 @@ def getDataOnCompanyFromRemoteDB(remoteDbIf, token, ticker, indicator):
          print "Sleeping a minute than retry..."
          time.sleep(60)
          continue
-      except DatasetNotFound as e:
-         print e
-         break
-      except (ErrorDownloading, WrongFormat) as e:
-         exit(e)
+      except (DatasetNotFound, ErrorDownloading, WrongFormat) as e:
+         raise e
       except:
          print "Unexpected error:", sys.exc_info()[0]
          raise
@@ -117,6 +118,22 @@ def cleanReportsTables(dbIf):
             if not dbIf.reportExist(report,company[0],year):
                dbIf.removeCompanyFromReports(company[0],year)
 
+def calculateRevenues(revenuePerYear):
+   totalRevenue=0
+   numOfYearsWithData=0
+   for year in revenuePerYear:
+      if revenuePerYear[year] != 0:
+         totalRevenue = totalRevenue + revenuePerYear[year]
+         numOfYearsWithData = numOfYearsWithData + 1
+   if numOfYearsWithData == 0: exit("No revenue was calculated")
+   print "Average annual return per year - {}".format(totalRevenue/numOfYearsWithData)
+   totalEarned = 1
+   for year in revenuePerYear:
+      if revenuePerYear[year] != 0:
+         totalEarned = totalEarned * (1 + revenuePerYear[year])
+   print "1$ invested at the start of the period give {}$ at the end over {} years".format(totalEarned,numOfYearsWithData)
+
+
 def testTheSystem(remoteDbIf, token,dbIf,numOfStocks,portfolioSize):
    """
       This function tests the trading system as described bellow.
@@ -131,31 +148,66 @@ def testTheSystem(remoteDbIf, token,dbIf,numOfStocks,portfolioSize):
             calculate how much gain/loose each stock
          At the end calculate how the whole portfolio has performed and add the result to some list
    """
+   if portfolioSize<=0 or numOfStocks<=0:
+      exit("Wrong values for parameters numOfStocks,portfolioSize")
+   revenuePerYear = {}
    for year in range(dbIf.getMinReportYear(),dbIf.getMaxReportYear()+1):
       rankedStocks = dbIf.systemTestComplexQuery(year,numOfStocks) #returns list of tuples (id,rank)
       if (len(rankedStocks)) != numOfStocks: 
          exit("Error: number of ranked stocks ({}) not equal initial numOfStocks parameter ({}).".format(len(rankedStocks),numOfStocks))
       print "--------------------------- Working on portfolio for year {} ----------------------------".format(year)
-      for s in range(0,portfolioSize):
-         ticker = dbIf.getCompanyTicker(rankedStocks[s][0])
-		 print "Company - {}, rank - {}".format(ticker, rankedStocks[s][1])
-         mktCapRpt = getDataOnCompanyFromRemoteDB(remoteDbIf, token, ticker, 'MKT_CAP') #list of tuples (timestamp,value)
-		 startDate = 0
-		 endDate = 0
-		 for t in mktCapRpt.itertuples():
-			if int(toYear(t[0])) == year: 
-			   startDate = toDate(t[0])
-			   endDate = toDate(str(year+1) + t[0][4:])
+      i=0
+      maxNumOfStocks = portfolioSize
+      totalRevenueForCurYear = 0
+      while i < maxNumOfStocks:
+         if maxNumOfStocks >= portfolioSize * 5: #TODO:parametrize
+            print "No price info for current year - {}".format(year)
+            break
+         ticker = dbIf.getCompanyTicker(rankedStocks[i][0])
+         print "Company - {}, rank - {}".format(ticker, i)
          try:
-			share = Share(ticker)
-			startPrice = share.get_historical(startDate,startDate)[0]['Close']
-            endPrice = share.get_historical(endDate,endDate)[0]['Close']
-            if startPrice == 0 or endPrice == 0:
-               print "DB doesn't have a prices for stock - {}, year - {}".format(ticker,year)
-			   print "startPrice - {} ; endPrice - {}".format(startPrice,endPrice)
-               continue
+            prices = getDataOnCompanyFromRemoteDB(remoteDbIf, token, ticker, 'STOCK_PX') #list of tuples (timestamp,value)
+         except DatasetNotFound as e:
+            print e
+            maxNumOfStocks=maxNumOfStocks+1
+            i=i+1
+            continue
+         startPrice = 0
+         endPrice = 0
+         for p in prices.itertuples():
+            if int(toYear(p[0])) == year:
+               startPrice = p[1]
+            elif int(toYear(p[0])) == year+1:
+               endPrice = p[1]
+         # mktCapRpt = getDataOnCompanyFromRemoteDB(remoteDbIf, token, ticker, 'MKT_CAP') #list of tuples (timestamp,value)
+         # for t in mktCapRpt.itertuples():
+         #    if int(toYear(t[0])) == year: 
+         #       startDate = toDate(t[0])
+         #       endDate = toDate(str(year+1) + str(t[0])[4:])
+         # share = Share(ticker)
+         # try:
+         #    startPrice = share.get_historical(startDate,startDate)[0]['Close']
+         #    endPrice = share.get_historical(endDate,endDate)[0]['Close']
+         # except yahoo_finance.YQLQueryError:
+         #    print "No price for stock - {}, skipping it.".format(ticker)
+         #    portfolioSize = portfolioSize + 1
+         #    continue
+         # if startPrice <= 0 or endPrice <= 0:
+         #    print "Not correct prices for stock - {}, year - {}".format(ticker,year)
+         #    print "startPrice - {} ; endPrice - {}".format(startPrice,endPrice)
+         #    continue
+         if startPrice > 0 and endPrice > 0:
             revenue = (endPrice-startPrice)/startPrice;
             print "Revenue for stock - {} is - {}".format(ticker,revenue)
+            totalRevenueForCurYear = totalRevenueForCurYear + revenue/portfolioSize
+         else:
+            print "Skipping the stock - {} with rank - {}".format(ticker,i)
+            maxNumOfStocks=maxNumOfStocks+1
+         i=i+1
+      revenuePerYear[str(year)] = totalRevenueForCurYear
+   calculateRevenues(revenuePerYear)
+
+
 
 
 def main():
@@ -188,5 +240,14 @@ def main():
       cleanReportsTables(dbIf)
    if args.testTheSystem:
       testTheSystem(Quandl, token, dbIf, int(args.testTheSystem[0]), int(args.testTheSystem[1]))
+      #revenuesDict = {
+      #'1999': 0, '2000': -0.15116243602481286,'2001': 0.15015505383480637,'2002': 0.16136973430344059,'2003': -0.0056805042534561253,'2004': 0.074353033134356608,
+      #'2005': 0.012477776840603432,'2006': -0.3089364851303929,'2007': 0.53527606381077297,'2008': 0.43055744209165114,'2009': -0.10546938540502342,
+      #'2010': 0.0066498899930935926,'2011': 0.16245481712975499,'2012': 0.40979983778302392,'2013': 0}
+      #calculateRevenues(revenuesDict)
 if __name__ == '__main__':
    main()
+
+#For systemTest 1000 20
+#Average annual return per year - 0.105526526008
+#1$ invested at the start of the period give 5.26457331428$ at the end over 13 years
