@@ -16,7 +16,7 @@ def get_auth_token():
     Read from file authtoken.txt authentication token and return it
     :rtype : string
     """
-    auth_file = open('authtoken.txt', 'r')
+    auth_file = open('data/authtoken.txt', 'r')
     token = auth_file.read().strip()
     auth_file.close()
     return token
@@ -88,10 +88,53 @@ def populate_reports(remote_db_if, db_if, token):
     :param db_if:class
     :param token:string
     """
+    print "Starting populate database with reports"
+    start_time = datetime.datetime.now().replace(microsecond=0)
     companies = db_if.get_all_companies()
     report_types = db_if.get_report_types()
     for reportType in report_types:
         populate_table(remote_db_if, db_if, token, companies, reportType)
+    end_time = datetime.datetime.now().replace(microsecond=0)
+    print "Time passed : {}".format(end_time - start_time)
+
+
+def pupolate_db_with_indicators_from_the_book(remote_db_if, db_if, token):
+    """
+    Took from Joel Greenblatt's book.
+    Two parameters:
+        1. high earnings yield
+        2. high return on capital
+    earnings yield = EBID / Enterprise Value
+    return on capital = ROC
+    The DMDRN database have the following related indicators:
+        To rank stocks: EBIT, EV, ROC
+        To find most capitalized: MKT_CAP
+        To calculate revenues:Change in MKT_CAP,DIV
+    Alternative databases:
+        For financial data (good for all indicators besides Price): SEC,RAYMOND
+            RAYMOND - currently don't work:
+                EBIT = OPERATING_INCOME + OTHER_NET
+                Enterprise Value = TOTAL_LIABILITIES_SHAREHOLDERS_EQUITY
+                ROC = EBID / (TOTAL_ASSETS - TOTAL_CURRENT_LIABILITIES)
+                MKT_CAP = TOTAL_COMMON_SHARES_OUTSTANDING * (PRICE_NOT_EXIST_IN_DB)
+                Dividends: DIVIDENDS_PER_SHARE_COMMON_STOCK_PRIMARY_ISSUE
+            SEC:
+            It has a few types of symbols for one indicator, differs from company to company, so meantime leave it.
+        For price data, actually no need if using MKT_CAP to calculate revenues:
+            WIKI:
+            Example of url request :
+            https://www.quandl.com/api/v1/datasets/WIKI/AAPL.csv?column=4&sort_order=asc&collapse=quarterly&\
+            trim_start=2012-01-01&trim_end=2013-12-31&auth_token=YOURAPIKEY
+
+    The DMRN database has data on dates : 1999-2013
+    The function should perform the following:
+    1.
+
+    :param remote_db_if:class
+    :param db_if:class
+    :param token:string
+    """
+    pass
 
 
 def populate_table(remote_db_if, db_if, token, companies_list, indicator):
@@ -134,7 +177,10 @@ def get_data_on_company_from_remote(remote_db_if, token, ticker, indicator):
             print "Sleeping a minute than retry..."
             time.sleep(60)
             continue
-        except (DatasetNotFound, ErrorDownloading, WrongFormat) as e:
+        except DatasetNotFound as e:
+            print e
+            # TODO:Try to fetch data from other databases
+        except (ErrorDownloading, WrongFormat) as e:
             raise e
         except:
             print "Unexpected error:", sys.exc_info()[0]
@@ -269,7 +315,7 @@ def main():
                         help='Optional parameter, if specified, '
                              'the script will clear companies records from fundamentals database and '
                              'start from clean state')
-    parser.add_argument('--clean_companies_table', action='store_true',
+    parser.add_argument('--cleanCompaniesTable', action='store_true',
                         help="Optional parameter, if specified, "
                              "the script will clean the database from companies which doesn't have all the records")
     parser.add_argument('--cleanReportsTables', action='store_true',
@@ -300,7 +346,6 @@ def main():
         clean_reports_tables(db_if)
     if args.testTheSystem:
         test_the_system(Quandl, token, db_if, int(args.testTheSystem[0]), int(args.testTheSystem[1]))
-
 
 if __name__ == '__main__':
     main()

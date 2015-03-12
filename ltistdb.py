@@ -193,9 +193,10 @@ class Ltistdb(object):
         return self._cursor.fetchall()[0][0]
 
     def unit_test(self):
-        print self.system_test_complex_query(1999, 5)
+        print self.get_all_companies()
+        # print self.system_test_complex_query(1999, 5)
         # value = self.has_values_in_report(18147,'PE_CURR')
-        #print value[0][0]
+        # print value[0][0]
         #   # self.register_company("AA'A", 'somename')
         #   # if not self.company_exist("AA'A"):
         #   #   raise ValueError("Company does not exist, when should")
